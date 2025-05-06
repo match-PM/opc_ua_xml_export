@@ -9,6 +9,8 @@ from asyncua import Client
 
 from XmlExporter import XmlExporter
 
+import xml.etree.ElementTree as ET
+
 
 class NodeXMLExporter:
     def __init__(self):
@@ -113,6 +115,27 @@ class NodeXMLExporter:
                 self.logger.info("\t%s:\t%d" % (type_info, typecounts_per_namespace[ns][type_info]))
         self.logger.info("\tTOTAL in namespace: %d" % len(self.nodes))
 
+def remove_nodes_with_implicit_ns0(xml_file: str, cleaned_file: str):
+    # Define default namespace
+    ns_uri = "http://opcfoundation.org/UA/2011/03/UANodeSet.xsd"
+    ET.register_namespace('', ns_uri)  # Register default (empty) prefix to avoid ns0:
+
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    keep_ids = {"i=51022", "i=50433", "i=50435", "i=50436"}
+
+    for elem in list(root):
+        node_id = elem.attrib.get("NodeId", "")
+        if node_id in keep_ids:
+            print(node_id)
+            continue
+        if node_id.startswith("i="):  # Implicit ns=0
+            root.remove(elem)
+
+    tree.write(cleaned_file, encoding="utf-8", xml_declaration=True)
+
+
 
 async def main():
     parser = argparse.ArgumentParser(
@@ -135,6 +158,8 @@ async def main():
     await exporter.import_nodes(server_url=args.serverUrl, username=args.username, password=args.password)
     await exporter.statistics()
     await exporter.export_xml(args.namespaces, args.outputFile, args.export_values)
+
+    remove_nodes_with_implicit_ns0(args.outputFile, args.outputFile)
 
     await exporter.client.disconnect()
 
